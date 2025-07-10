@@ -370,6 +370,5 @@ async def send_weekly_email():
 
 
 import os
-send_weekly_email.start()
 bot.run(os.getenv("DISCORD_TOKEN"))
 
