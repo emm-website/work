@@ -1,3 +1,5 @@
+import smtplib
+from email.message import EmailMessage
 import discord
 from discord.ext import commands, tasks
 import os
@@ -261,6 +263,36 @@ async def remove_money(ctx, user: discord.User, amount: float):
     update_wallet(str(user.id), -amount)
     await ctx.send(f"💸 Removed {amount}€ from {user.display_name}'s wallet.")
 
+
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+@bot.command(name="test_email")
+async def test_email(ctx):
+    sender_email = os.getenv("EMAIL_ADDRESS")
+    sender_password = os.getenv("EMAIL_PASSWORD")
+    recipients = ["ala.hergli20@gmail.com", "medazizhergli2006@gmail.com"]
+
+    message = MIMEMultipart()
+    message["From"] = sender_email
+    message["To"] = ", ".join(recipients)
+    message["Subject"] = "✅ Test Email from Discord Bot"
+
+    body = "This is a test email to confirm your Railway SMTP setup works."
+    message.attach(MIMEText(body, "plain"))
+
+    try:
+        server = smtplib.SMTP(os.getenv("SMTP_SERVER"), int(os.getenv("SMTP_PORT")))
+        server.starttls()
+        server.login(sender_email, sender_password)
+        server.sendmail(sender_email, recipients, message.as_string())
+        server.quit()
+        await ctx.send("✅ Test email sent successfully.")
+    except Exception as e:
+        await ctx.send(f"❌ Failed to send email: {e}")
+
+
 @tasks.loop(time=dtime(hour=23, minute=59, tzinfo=timezone.utc))
 async def apply_daily_scores():
     today = datetime.utcnow().strftime("%Y-%m-%d")
@@ -277,6 +309,7 @@ async def apply_daily_scores():
             user_id = filename.replace(".json", "")
             if user_id not in users_with_submission:
                 update_joker(user_id, -1)
+
 
 @tasks.loop(time=dtime(hour=0, minute=1, tzinfo=timezone.utc))
 async def monthly_reset():
@@ -296,6 +329,45 @@ async def monthly_reset():
         if not is_admin(ctx.guild.get_member(int(user_id))):
             update_joker(user_id, 5)
 
+
+@tasks.loop(time=dtime(hour=0, minute=0, tzinfo=timezone.utc))
+async def send_weekly_email():
+    if datetime.utcnow().weekday() != 6:  # Sunday
+        return
+
+    summary = ""
+    for filename in os.listdir("jokers"):
+        user_id = filename.replace(".json", "")
+        jokers = 0
+        wallet = 0.0
+        if os.path.exists(f"jokers/{user_id}.json"):
+            with open(f"jokers/{user_id}.json", "r") as f:
+                jokers = json.load(f).get("jokers", 0)
+        if os.path.exists(f"wallets/{user_id}.json"):
+            with open(f"wallets/{user_id}.json", "r") as f:
+                wallet = json.load(f).get("wallet", 0.0)
+        
+        summary += f"👤 User ID: {user_id}\n"
+        summary += f"  - Jokers: {jokers}\n"
+        summary += f"  - Wallet: €{wallet:.2f}\n\n"
+
+    msg = EmailMessage()
+    msg["Subject"] = "📊 Weekly CheckBot Stats"
+    msg["From"] = os.getenv("EMAIL_ADDRESS")
+    msg["To"] = "ala.hergli20@gmail.com, medazizhergli2006@gmail.com"
+    msg.set_content(summary)
+
+    try:
+        with smtplib.SMTP(os.getenv("SMTP_SERVER"), int(os.getenv("SMTP_PORT"))) as smtp:
+            smtp.starttls()
+            smtp.login(os.getenv("EMAIL_ADDRESS"), os.getenv("EMAIL_PASSWORD"))
+            smtp.send_message(msg)
+        print("✅ Weekly email sent.")
+    except Exception as e:
+        print(f"❌ Failed to send email: {e}")
+
+
 import os
+send_weekly_email.start()
 bot.run(os.getenv("DISCORD_TOKEN"))
 
