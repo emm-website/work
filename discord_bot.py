@@ -43,6 +43,8 @@ async def on_ready():
     print(f"✅ Bot is ready as {bot.user}")
     apply_daily_scores.start()
     monthly_reset.start()
+    send_weekly_email.start()  # ← MOVE IT HERE
+
 
 @bot.event
 
