@@ -17,12 +17,10 @@ bot = commands.Bot(command_prefix="/", intents=intents)
 
 user_states = {}
 questions = [
-    "Hello {username}, did you close your Sport ring of 5min today? (yes/no)",
-    "Did you drink 500ml of water today? (yes/no)",
-    "Did you sleep at 10-12pm for 8 hours? (yes/no)",
-    "What went well today that brought you closer to your career goals?",
-    "What challenge did you face today, and what did you learn for tomorrow?",
-    "What is your main goal for tomorrow, and how will you achieve it?"
+    "What did you understand from the book that you read?",
+    "What did you learn that you can do in your life?",
+    "Send a proof with the name of the book (upload file/photo).",
+    "(Optional) Do you want to add the name of the book? If not, type NO."
 ]
 proof_requests = {
     0: "Submit your photo please.",
@@ -47,7 +45,6 @@ async def on_ready():
 
 
 @bot.event
-
 async def on_message(message):
     if message.author == bot.user:
         return
@@ -60,11 +57,10 @@ async def on_message(message):
     today = datetime.utcnow().strftime("%Y-%m-%d")
     filepath = f"submissions/{today}_{user_id}.json"
 
-    # Handle confirmation response for duplicate
     if user_id in user_states and user_states[user_id].get("confirmation_pending"):
         answer = message.content.strip().lower()
         if answer == "yes":
-            os.remove(filepath)  # delete the previous submission
+            os.remove(filepath)
             del user_states[user_id]
         elif answer == "no":
             await message.channel.send("❌ Submission cancelled. Keeping previous one.")
@@ -87,61 +83,34 @@ async def on_message(message):
         user_states[user_id] = {
             "step": 0,
             "answers": {},
-            "waiting_for_proof": False,
-            "proof_type": None,
-            "proof_path": {},
+            "proof_path": None,
             "start_time": today,
             "username": message.author.display_name
         }
-        await message.channel.send(questions[0].format(username=message.author.display_name))
+        await message.channel.send(questions[0])
         return
 
     state = user_states[user_id]
     step = state.get("step", 0)
 
-    if state.get("waiting_for_proof"):
+    if step == 2:  # Expecting proof file
         if message.attachments:
             proof_url = message.attachments[0].url
-            state["proof_path"][f"q{step}_proof"] = proof_url
-            state["waiting_for_proof"] = False
+            state["proof_path"] = proof_url
             state["step"] += 1
         else:
-            await message.channel.send("⚠️ Please upload the required file.")
+            await message.channel.send("⚠️ Please upload your proof (image or file) for the book.")
             return
     else:
-        if step in [0, 1, 2]:
-            if message.attachments:
-                proof_url = message.attachments[0].url
-                state["answers"][f"q{step}"] = "yes"
-                state["proof_path"][f"q{step}_proof"] = proof_url
-                state["step"] += 1
-            else:
-                answer = message.content.strip().lower()
-                if answer not in ["yes", "no"]:
-                    await message.channel.send("Please answer with 'yes' or 'no', or upload your proof directly.")
-                    return
-                state["answers"][f"q{step}"] = answer
-                if answer == "yes":
-                    state["waiting_for_proof"] = True
-                    state["proof_type"] = step
-                    await message.channel.send(proof_requests[step])
-                    return
-                else:
-                    state["step"] += 1
-        else:
-            state["answers"][f"q{step}"] = message.content.strip()
-            state["step"] += 1
+        state["answers"][f"q{step}"] = message.content.strip()
+        state["step"] += 1
 
     if state["step"] < len(questions):
-        await message.channel.send(questions[state["step"]].format(username=state['username']))
+        await message.channel.send(questions[state["step"]])
     else:
-        score = 0
-        if (state["answers"].get("q0") == "no") or (state["answers"].get("q1") == "no"):
-            score -= 1
-        if "q2_proof" in state["proof_path"]:
-            score += 0.5
+        score = 0  # You can define custom logic later if needed
 
-        await message.channel.send(f"✅ Thanks for submitting! \n Your score for today is: {score} Joker(s)")
+        await message.channel.send("✅ Thanks for submitting! Your score for today is: 0 Jokers")
 
         submission_data = {
             "user": state["username"],
